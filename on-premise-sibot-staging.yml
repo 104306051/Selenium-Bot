@@ -1,0 +1,120 @@
+version: "3.5"
+
+services:  
+  # cron_job:
+    # image:  800831113641.dkr.ecr.us-east-2.amazonaws.com/on-premise-autoscaler-agent:v0.16
+    # depends_on:
+      # - xray_daemon
+    # networks:
+      # - onpremise_sibot_xray_net
+    # environment:
+      # AWS_REGION: us-west-2
+      # AWS_ACCESS_KEY_ID: ${AWS_SIBOT_AUTOSCALER_AK}
+      # AWS_SECRET_ACCESS_KEY: ${AWS_SIBOT_AUTOSCALER_SK}    
+      # QUEUE_NAME: sherlock-serverless-staging-obscreationrequest.fifo
+      # ENV: staging
+      # CONSUMER_IMAGE_NAME: 800831113641.dkr.ecr.us-east-2.amazonaws.com/on-premise-sibot:v0.7
+      # CONSUMER_APP_NAME: sibot-staging
+      # CONSUMER_MIN_SIZE: 1
+      # CONSUMER_MAX_SIZE: 1
+      # CONSUMER_CPU_LIMIT: 0.1
+      # CONSUMER_MEM_LIMIT: 64
+      # CONSUMER_CPU_RESERVATION: 0.05
+      # CONSUMER_MEM_RESERVATION: 48
+      # SWARM_NETWORK: sherlock_onpremise_sibot_staging_xray_net
+      # XRAY_DAEMON_ADDRESS: xray_daemon:2000
+      # METRIC_INTERVAL: 300
+    # volumes:
+      # - "/var/run/docker.sock:/var/run/docker.sock"
+      # - "/home/sherlock/on-premise-sibot-agent-artifacts/logs:/app/logs"
+    # deploy:
+      # mode: replicated
+      # replicas: 1
+      # labels:
+        # - "swarm.cronjob.enable=true"
+        # - "swarm.cronjob.schedule=* * * * *"
+        # - "swarm.cronjob.skip-running=false"
+      # restart_policy:
+        # condition: none
+      # placement:
+        # constraints:
+          # - node.role == manager
+  si-bot:
+    image:  800831113641.dkr.ecr.us-east-2.amazonaws.com/on-premise-sibot:v0.7
+    networks:
+      - onpremise_sibot_xray_net
+    depends_on:       
+      - firefox
+    environment:
+      #todo: need to import AK/SK for XRay and SQS access rights
+      #AWS_REGION: us-west-2
+      #AWS_ACCESS_KEY_ID: ${AWS_SIBOT_AK}
+      #AWS_SECRET_ACCESS_KEY: ${AWS_SIBOT_SK}
+      QUEUE_NAME: sherlock-serverless-staging-obscreationrequest.fifo
+      SELENIUM_HUB: http://selenium_hub:4444/wd/hub
+      ENV: staging
+      XRAY_DAEMON_ADDRESS: xray_daemon:2000      
+    deploy:
+      mode: replicated
+      replicas: 1
+      resources:
+          limits:
+            cpus: '0.1'
+            memory: 64M
+          reservations:
+            cpus: '0.02'
+            memory: 48M
+  selenium_hub:
+    image: selenium/hub:3.141.59-20210422    
+    networks:
+      - onpremise_sibot_xray_net
+    deploy:
+      mode: replicated
+      replicas: 1
+      resources:
+          limits:
+            cpus: '0.2'
+            memory: 256M
+          reservations:
+            cpus: '0.1'
+            memory: 128M
+  firefox:
+    image: selenium/node-firefox:3.141.59-20210422
+    networks:
+      - onpremise_sibot_xray_net
+    depends_on:
+      - selenium_hub
+    volumes:
+      - /dev/shm:/dev/shm
+    environment:
+      HUB_HOST: selenium_hub
+      HUB_PORT: 4444
+    deploy:
+        mode: replicated
+        replicas: 1
+        resources:
+          limits:
+            cpus: '2'
+            memory: 2048M
+          reservations:
+            cpus: '1'
+            memory: 1024M
+    entrypoint: bash -c 'SE_OPTS="-host $$HOSTNAME" /opt/bin/entry_point.sh'
+    
+  xray_daemon:
+    image: amazon/aws-xray-daemon:3.2.0
+    networks:
+      - onpremise_sibot_xray_net
+    environment:
+      AWS_REGION: us-west-2
+      AWS_ACCESS_KEY_ID: ${AWS_SIBOT_AUTOSCALER_AK}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SIBOT_AUTOSCALER_SK}
+    command: --local-mode
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+networks:
+  onpremise_sibot_xray_net:
+    name: sherlock_onpremise_sibot_staging_xray_net
+    driver: overlay

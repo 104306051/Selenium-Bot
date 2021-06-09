@@ -1,0 +1,7 @@
+boto3==1.9.217
+botocore==1.12.217
+Scrapy>=1.6.0
+selenium>=3.141.0
+requests==2.24.0
+pymssql==2.2.1
+
